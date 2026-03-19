@@ -112,20 +112,6 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [activeMealType, setActiveMealType] = useState<LogEntry['meal_type']>('breakfast');
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([]);
-  const [logoData, setLogoData] = useState<string>("/FU_Logo.png");
-
-  useEffect(() => {
-    const fetchLogo = async () => {
-      try {
-        const res = await fetch("/api/logo");
-        const data = await res.json();
-        if (data.data) setLogoData(data.data);
-      } catch (err) {
-        console.error("Logo fetch error:", err);
-      }
-    };
-    fetchLogo();
-  }, []);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -134,6 +120,9 @@ export default function App() {
   const [quantity, setQuantity] = useState<string>('100');
   const [unitType, setUnitType] = useState<'grams' | 'units'>('grams');
   const [isSearching, setIsSearching] = useState(false);
+  const [isCustomMode, setIsCustomMode] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customCalories, setCustomCalories] = useState('');
 
   useEffect(() => {
     loadAppData();
@@ -177,22 +166,32 @@ export default function App() {
   };
 
   const logFood = async () => {
-    if (!selectedFood) return;
+    if (!selectedFood && !isCustomMode) return;
 
     const qty = parseFloat(quantity);
-    const grams = unitType === 'units' ? qty * selectedFood.grams_per_unit : qty;
+    const grams = unitType === 'units' ? qty * (selectedFood?.grams_per_unit || 100) : qty;
     const factor = grams / 100;
 
-    const entry = {
+    const entry = isCustomMode ? {
       date: selectedDate,
       meal_type: activeMealType,
-      food_name: selectedFood.name,
+      food_name: customName,
+      quantity_grams: 100, // Default for custom
+      calories: parseFloat(customCalories) || 0,
+      protein: 0,
+      carbs: 0,
+      fats: 0,
+      fiber: 0
+    } : {
+      date: selectedDate,
+      meal_type: activeMealType,
+      food_name: selectedFood!.name,
       quantity_grams: grams,
-      calories: selectedFood.calories_per_100g * factor,
-      protein: selectedFood.protein_per_100g * factor,
-      carbs: selectedFood.carbs_per_100g * factor,
-      fats: selectedFood.fats_per_100g * factor,
-      fiber: selectedFood.fiber_per_100g * factor
+      calories: selectedFood!.calories_per_100g * factor,
+      protein: selectedFood!.protein_per_100g * factor,
+      carbs: selectedFood!.carbs_per_100g * factor,
+      fats: selectedFood!.fats_per_100g * factor,
+      fiber: selectedFood!.fiber_per_100g * factor
     };
 
     try {
@@ -203,6 +202,9 @@ export default function App() {
       setIsAddModalOpen(false);
       setSelectedFood(null);
       setSearchQuery('');
+      setCustomName('');
+      setCustomCalories('');
+      setIsCustomMode(false);
       loadAppData();
     } catch (err) {
       console.error("Failed to log food", err);
@@ -248,26 +250,33 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans pb-24">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zinc-100 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <img src={logoData} alt="FeelU" style={{ height: '40px', width: 'auto' }} />
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zinc-100 px-6 py-4 grid grid-cols-3 items-center">
+        <div className="flex justify-start">
+          <span className="text-2xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tighter">FU</span>
         </div>
-        <div className="flex items-center gap-3 bg-zinc-100 p-1 rounded-xl">
-          <button 
-            onClick={() => changeDate(-1)}
-            className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all"
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <span className="text-sm font-semibold px-2">
-            {selectedDate === getTodayDate() ? 'Today' : selectedDate}
-          </span>
-          <button 
-            onClick={() => changeDate(1)}
-            className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all"
-          >
-            <ArrowRight size={16} />
-          </button>
+        
+        <div className="flex justify-center">
+          <span className="text-2xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tight">FeelU</span>
+        </div>
+
+        <div className="flex justify-end">
+          <div className="flex items-center gap-1 bg-zinc-100 p-0.5 rounded-lg">
+            <button 
+              onClick={() => changeDate(-1)}
+              className="p-1 hover:bg-white hover:shadow-sm rounded-md transition-all"
+            >
+              <ArrowLeft size={14} />
+            </button>
+            <span className="text-[10px] font-bold px-1 min-w-[60px] text-center">
+              {selectedDate === getTodayDate() ? 'Today' : selectedDate.split('-').slice(1).join('/')}
+            </span>
+            <button 
+              onClick={() => changeDate(1)}
+              className="p-1 hover:bg-white hover:shadow-sm rounded-md transition-all"
+            >
+              <ArrowRight size={14} />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -509,7 +518,62 @@ export default function App() {
               </div>
 
               <div className="p-6 flex-1 overflow-y-auto space-y-6">
-                {!selectedFood ? (
+                {!selectedFood && !isCustomMode && (
+                  <div className="flex bg-zinc-100 p-1 rounded-2xl mb-2">
+                    <button 
+                      onClick={() => setIsCustomMode(false)}
+                      className={cn("flex-1 py-2 text-sm font-bold rounded-xl transition-all", !isCustomMode ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500")}
+                    >
+                      Search
+                    </button>
+                    <button 
+                      onClick={() => setIsCustomMode(true)}
+                      className={cn("flex-1 py-2 text-sm font-bold rounded-xl transition-all", isCustomMode ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500")}
+                    >
+                      Custom
+                    </button>
+                  </div>
+                )}
+
+                {isCustomMode ? (
+                  <div className="space-y-6">
+                    <button 
+                      onClick={() => setIsCustomMode(false)}
+                      className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-800 transition-colors"
+                    >
+                      <ArrowLeft size={14} /> Back to search
+                    </button>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Food Name</label>
+                        <input 
+                          type="text"
+                          placeholder="e.g. Grandma's Special Cake"
+                          value={customName}
+                          onChange={(e) => setCustomName(e.target.value)}
+                          className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Calories (kcal)</label>
+                        <input 
+                          type="number"
+                          placeholder="0"
+                          value={customCalories}
+                          onChange={(e) => setCustomCalories(e.target.value)}
+                          className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg"
+                        />
+                      </div>
+                    </div>
+                    <button 
+                      onClick={logFood}
+                      disabled={!customName || !customCalories}
+                      className="w-full py-5 bg-emerald-500 text-white font-bold text-lg rounded-3xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200 disabled:opacity-50 disabled:shadow-none"
+                    >
+                      Log Custom Food
+                    </button>
+                  </div>
+                ) : !selectedFood ? (
                   <div className="space-y-4">
                     <div className="relative">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />

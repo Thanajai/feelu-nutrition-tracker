@@ -1,7 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import fs from "fs";
 import db from "./db.ts";
 
 async function startServer() {
@@ -18,22 +17,6 @@ async function startServer() {
 
   // API Routes
   
-  // Get logo as base64
-  app.get("/api/logo", (req, res) => {
-    try {
-      const logoPath = path.resolve("public", "FU_Logo.png");
-      if (fs.existsSync(logoPath)) {
-        const base64 = fs.readFileSync(logoPath, { encoding: "base64" });
-        res.json({ data: `data:image/png;base64,${base64}` });
-      } else {
-        res.status(404).json({ error: "Logo not found" });
-      }
-    } catch (error) {
-      console.error("Logo error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
   // Search foods
   app.get("/api/foods/search", (req, res) => {
     try {
