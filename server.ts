@@ -8,6 +8,7 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  app.use(express.static("public"));
 
   // API Routes
   
