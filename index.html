@@ -4,6 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FeelU - Nutrition Tracker</title>
+    <meta name="description" content="Track your daily nutrition and reach your goals with FeelU.">
+    <meta name="theme-color" content="#10b981">
+    <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg">
+    <link rel="apple-touch-icon" href="/pwa-icon.svg">
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(registration => {
+              console.log('SW registered: ', registration);
+            })
+            .catch(registrationError => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

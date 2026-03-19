@@ -1,5 +1,5 @@
 {
   "name": "FeelU",
-  "description": "A clean, modern nutrition tracker with daily progress, meal logging, and history.",
+  "description": "A clean, modern PWA nutrition tracker with daily progress, meal logging, and history.",
   "requestFramePermissions": []
 }
