@@ -11,6 +11,11 @@ async function startServer() {
   app.use(express.json());
   app.use(express.static(path.resolve("public")));
 
+  // Health check for deployment
+  app.get("/health", (req, res) => {
+    res.status(200).send("OK");
+  });
+
   // API Routes
   
   // Get logo as base64
@@ -180,8 +185,11 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server is listening on 0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error("Critical server startup error:", err);
+  process.exit(1);
+});

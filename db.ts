@@ -3,18 +3,27 @@ import fs from 'fs';
 import path from 'path';
 
 let finalDbPath = process.env.DATABASE_PATH || 'feelu.db';
-const dbDir = path.dirname(finalDbPath);
 
-if (dbDir !== '.' && !fs.existsSync(dbDir)) {
-  try {
-    fs.mkdirSync(dbDir, { recursive: true });
-  } catch (err) {
-    console.error(`Warning: Could not create database directory ${dbDir}. Falling back to local storage.`, err);
-    finalDbPath = 'feelu.db';
+// Ensure the directory exists if a custom path is provided
+if (path.isAbsolute(finalDbPath) || finalDbPath.includes(path.sep)) {
+  const dbDir = path.dirname(finalDbPath);
+  if (!fs.existsSync(dbDir)) {
+    try {
+      fs.mkdirSync(dbDir, { recursive: true });
+    } catch (err) {
+      console.error(`Warning: Could not create database directory ${dbDir}. Falling back to local storage.`, err);
+      finalDbPath = 'feelu.db';
+    }
   }
 }
 
-const db = new Database(finalDbPath);
+let db: any;
+try {
+  db = new Database(finalDbPath);
+} catch (err) {
+  console.error(`Fatal: Could not open database at ${finalDbPath}. Trying local fallback.`, err);
+  db = new Database('feelu.db');
+}
 
 // Initialize tables
 db.exec(`
