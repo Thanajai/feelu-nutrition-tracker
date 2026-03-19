@@ -3,6 +3,10 @@ import fs from 'fs';
 import path from 'path';
 
 const dbPath = process.env.DATABASE_PATH || 'feelu.db';
+const dbDir = path.dirname(dbPath);
+if (dbDir !== '.' && !fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 const db = new Database(dbPath);
 
 // Initialize tables
