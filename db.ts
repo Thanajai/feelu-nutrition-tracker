@@ -2,20 +2,18 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 
-const dbPath = process.env.DATABASE_PATH || 'feelu.db';
-const dbDir = path.dirname(dbPath);
+let finalDbPath = process.env.DATABASE_PATH || 'feelu.db';
+const dbDir = path.dirname(finalDbPath);
 
 if (dbDir !== '.' && !fs.existsSync(dbDir)) {
   try {
     fs.mkdirSync(dbDir, { recursive: true });
   } catch (err) {
     console.error(`Warning: Could not create database directory ${dbDir}. Falling back to local storage.`, err);
-    // Fallback to local file if directory creation fails
-    process.env.DATABASE_PATH = 'feelu.db';
+    finalDbPath = 'feelu.db';
   }
 }
 
-const finalDbPath = process.env.DATABASE_PATH || 'feelu.db';
 const db = new Database(finalDbPath);
 
 // Initialize tables

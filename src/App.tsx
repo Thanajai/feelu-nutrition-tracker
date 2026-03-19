@@ -112,6 +112,20 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [activeMealType, setActiveMealType] = useState<LogEntry['meal_type']>('breakfast');
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([]);
+  const [logoData, setLogoData] = useState<string>("/FU_Logo.png");
+
+  useEffect(() => {
+    const fetchLogo = async () => {
+      try {
+        const res = await fetch("/api/logo");
+        const data = await res.json();
+        if (data.data) setLogoData(data.data);
+      } catch (err) {
+        console.error("Logo fetch error:", err);
+      }
+    };
+    fetchLogo();
+  }, []);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -236,7 +250,7 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zinc-100 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img src="/FU_Logo.png" alt="FeelU" style={{ height: '40px', width: 'auto' }} />
+          <img src={logoData} alt="FeelU" style={{ height: '40px', width: 'auto' }} />
         </div>
         <div className="flex items-center gap-3 bg-zinc-100 p-1 rounded-xl">
           <button 

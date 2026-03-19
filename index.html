@@ -4,7 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FeelU - Nutrition Tracker</title>
-    <link rel="icon" type="image/png" href="/FU_Logo.png">
+    <link id="favicon" rel="icon" type="image/png" href="/FU_Logo.png">
+    <script>
+      fetch('/api/logo')
+        .then(response => response.json())
+        .then(data => {
+          if (data.data) {
+            document.getElementById('favicon').href = data.data;
+          }
+        })
+        .catch(error => console.error('Favicon fetch error:', error));
+    </script>
   </head>
   <body>
     <div id="root"></div>
