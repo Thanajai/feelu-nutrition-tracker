@@ -2,7 +2,8 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 
-const db = new Database('feelu.db');
+const dbPath = process.env.DATABASE_PATH || 'feelu.db';
+const db = new Database(dbPath);
 
 // Initialize tables
 db.exec(`
