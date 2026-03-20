@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, X, ChevronDown, ChevronUp, Trash2, Home, ArrowLeft, ArrowRight, LogOut, Settings as SettingsIcon, History as HistoryIcon } from 'lucide-react';
+import { Search, Plus, X, ChevronDown, ChevronUp, Trash2, Home, ArrowLeft, ArrowRight, LogOut, Settings as SettingsIcon, History as HistoryIcon, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Food, LogEntry, DailyGoals, WeeklyStat } from './types';
@@ -14,11 +14,11 @@ const ProgressBar = ({ label, current, goal, unit, color }: { label: string, cur
   const percentage = Math.min((current / goal) * 100, 100);
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-sm font-medium text-zinc-500 uppercase tracking-wider">
+      <div className="flex justify-between text-sm font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
         <span>{label}</span>
         <span>{formatNumber(current)} / {goal} {unit}</span>
       </div>
-      <div className="h-2 w-full bg-zinc-100 rounded-full overflow-hidden">
+      <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width: `${percentage}%` }}
@@ -47,14 +47,14 @@ const MealSection = ({
   const totalCals = mealLogs.reduce((acc, l) => acc + l.calories, 0);
 
   return (
-    <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
+    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm overflow-hidden">
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-5 py-4 flex items-center justify-between hover:bg-zinc-50 transition-colors"
+        className="w-full px-5 py-4 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <h3 className="font-semibold text-zinc-900">{title}</h3>
-          <span className="text-xs font-medium px-2 py-0.5 bg-zinc-100 text-zinc-500 rounded-full">
+          <h3 className="font-semibold text-zinc-900 dark:text-white">{title}</h3>
+          <span className="text-xs font-medium px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full">
             {formatNumber(totalCals)} kcal
           </span>
         </div>
@@ -76,14 +76,14 @@ const MealSection = ({
                 mealLogs.map(log => (
                   <div key={log.log_id} className="flex items-center justify-between group">
                     <div>
-                      <p className="text-sm font-medium text-zinc-800">{log.food_name}</p>
-                      <p className="text-xs text-zinc-500">
+                      <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{log.food_name}</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
                         {log.quantity_grams}g • {formatNumber(log.calories)} kcal • P: {formatNumber(log.protein)}g
                       </p>
                     </div>
                     <button 
                       onClick={() => onDelete(log.log_id)}
-                      className="p-1.5 text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                      className="p-1.5 text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -92,7 +92,7 @@ const MealSection = ({
               )}
               <button 
                 onClick={onAddClick}
-                className="w-full mt-2 py-2 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors"
+                className="w-full mt-2 py-2 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 rounded-xl transition-colors"
               >
                 <Plus size={16} />
                 Add Food
@@ -109,6 +109,13 @@ const MealSection = ({
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark' || 
+        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+    return false;
+  });
   const [view, setView] = useState<'today' | 'history' | 'settings'>('today');
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -136,6 +143,16 @@ export default function App() {
     gender: 'male',
     activity: '1.2'
   });
+
+  useEffect(() => {
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    console.log('Theme changed:', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -408,7 +425,7 @@ export default function App() {
     setIsCalculatorOpen(false);
   };
 
-  if (!session) return <Auth />;
+  if (!session) return <Auth darkMode={darkMode} setDarkMode={setDarkMode} />;
 
   const totals = logs.reduce((acc, l) => ({
     calories: acc.calories + l.calories,
@@ -425,9 +442,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans pb-24">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans pb-24 transition-colors duration-300">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zinc-100 px-6 py-4 grid grid-cols-3 items-center">
+      <header className="sticky top-0 z-30 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-100 dark:border-zinc-800 px-6 py-4 grid grid-cols-3 items-center">
         <div className="flex justify-start">
           <span className="text-3xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tighter">FU</span>
         </div>
@@ -436,27 +453,32 @@ export default function App() {
           <span className="text-3xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tight">FeelU</span>
         </div>
 
-        <div className="flex justify-end invisible">
-          <span className="text-3xl font-black">FU</span>
+        <div className="flex justify-end">
+          <button 
+            onClick={() => setDarkMode(!darkMode)}
+            className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+          >
+            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
         </div>
       </header>
 
       <main className="max-w-xl mx-auto px-6 py-8 space-y-8">
         {/* Date selector outside in the center */}
         <div className="flex justify-center">
-          <div className="flex items-center gap-2 bg-zinc-100 p-1 rounded-xl shadow-sm border border-zinc-200">
+          <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 transition-colors">
             <button 
               onClick={() => changeDate(-1)}
-              className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all"
+              className="p-2 hover:bg-white dark:hover:bg-zinc-700 hover:shadow-sm rounded-lg transition-all dark:text-zinc-300"
             >
               <ArrowLeft size={18} />
             </button>
-            <span className="text-sm font-bold px-2 min-w-[80px] text-center">
+            <span className="text-sm font-bold px-2 min-w-[80px] text-center dark:text-white">
               {selectedDate === getTodayDate() ? 'Today' : selectedDate.split('-').slice(1).join('/')}
             </span>
             <button 
               onClick={() => changeDate(1)}
-              className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all"
+              className="p-2 hover:bg-white dark:hover:bg-zinc-700 hover:shadow-sm rounded-lg transition-all dark:text-zinc-300"
             >
               <ArrowRight size={18} />
             </button>
@@ -466,18 +488,18 @@ export default function App() {
         {view === 'today' && (
           <>
             {/* Dashboard */}
-            <section className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm space-y-6">
+            <section className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm space-y-6">
               <div className="flex items-end justify-between">
                 <div>
-                  <p className="text-zinc-500 text-sm font-medium uppercase tracking-wider">Calories</p>
-                  <h2 className="text-4xl font-bold text-zinc-900">
+                  <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium uppercase tracking-wider">Calories</p>
+                  <h2 className="text-4xl font-bold text-zinc-900 dark:text-white">
                     {formatNumber(totals.calories)} <span className="text-lg font-normal text-zinc-400">/ {goals?.calorie_goal} kcal</span>
                   </h2>
-                  <p className="text-xs font-semibold text-emerald-600 mt-1">
+                  <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
                     {Math.max(0, (goals?.calorie_goal || 2000) - Math.round(totals.calories))} kcal remaining
                   </p>
                 </div>
-                <div className="w-16 h-16 rounded-full border-4 border-zinc-100 flex items-center justify-center relative">
+                <div className="w-16 h-16 rounded-full border-4 border-zinc-100 dark:border-zinc-800 flex items-center justify-center relative">
                    <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
                       <circle 
                         cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="8" 
@@ -534,17 +556,17 @@ export default function App() {
 
         {view === 'history' && (
           <section className="space-y-8">
-            <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm">
-              <h3 className="text-lg font-bold mb-6">Last 7 Days</h3>
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm">
+              <h3 className="text-lg font-bold mb-6 dark:text-white">Last 7 Days</h3>
               <div className="h-80 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={weeklyStats} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? "#333" : "#f1f1f1"} />
                     <XAxis 
                       dataKey="date" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 12, fill: '#888' }}
+                      tick={{ fontSize: 12, fill: darkMode ? '#666' : '#888' }}
                       tickFormatter={(val) => val.split('-').slice(1).join('/')}
                     />
                     <YAxis 
@@ -552,22 +574,28 @@ export default function App() {
                       orientation="left"
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 12, fill: '#888' }} 
-                      label={{ value: 'Macros (g)', angle: -90, position: 'insideLeft', style: { fontSize: 12, fill: '#888' } }}
+                      tick={{ fontSize: 12, fill: darkMode ? '#666' : '#888' }} 
+                      label={{ value: 'Macros (g)', angle: -90, position: 'insideLeft', style: { fontSize: 12, fill: darkMode ? '#666' : '#888' } }}
                     />
                     <YAxis 
                       yAxisId="right"
                       orientation="right"
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 12, fill: '#888' }}
-                      label={{ value: 'Calories (kcal)', angle: 90, position: 'insideRight', style: { fontSize: 12, fill: '#888' } }}
+                      tick={{ fontSize: 12, fill: darkMode ? '#666' : '#888' }}
+                      label={{ value: 'Calories (kcal)', angle: 90, position: 'insideRight', style: { fontSize: 12, fill: darkMode ? '#666' : '#888' } }}
                     />
                     <Tooltip 
-                      cursor={{ fill: '#f8f8f8' }}
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
+                      cursor={{ fill: darkMode ? '#222' : '#f8f8f8' }}
+                      contentStyle={{ 
+                        borderRadius: '12px', 
+                        border: 'none', 
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                        backgroundColor: darkMode ? '#18181b' : '#fff',
+                        color: darkMode ? '#fff' : '#000'
+                      }}
                     />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '20px' }} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '20px', color: darkMode ? '#888' : '#666' }} />
                     <Bar yAxisId="left" dataKey="total_protein" name="Protein (g)" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
                     <Bar yAxisId="left" dataKey="total_carbs" name="Carbs (g)" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} />
                     <Bar yAxisId="left" dataKey="total_fats" name="Fats (g)" stackId="a" fill="#f43f5e" radius={[0, 0, 0, 0]} />
@@ -577,9 +605,9 @@ export default function App() {
                       type="monotone" 
                       dataKey="total_calories" 
                       name="Calories (kcal)" 
-                      stroke="#18181b" 
+                      stroke={darkMode ? "#fff" : "#18181b"} 
                       strokeWidth={3} 
-                      dot={{ r: 6, fill: '#18181b', strokeWidth: 2, stroke: '#fff' }}
+                      dot={{ r: 6, fill: darkMode ? '#fff' : '#18181b', strokeWidth: 2, stroke: darkMode ? '#18181b' : '#fff' }}
                       activeDot={{ r: 8, strokeWidth: 0 }}
                     />
                   </ComposedChart>
@@ -588,25 +616,25 @@ export default function App() {
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-lg font-bold">Daily Logs</h3>
+              <h3 className="text-lg font-bold dark:text-white">Daily Logs</h3>
               <input 
                 type="date" 
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full p-4 bg-white border border-zinc-100 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full p-4 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
               />
               {logs.length > 0 ? (
-                <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm space-y-4">
+                <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm space-y-4">
                    {logs.map(log => (
-                      <div key={log.log_id} className="flex justify-between items-center border-b border-zinc-50 pb-3 last:border-0 last:pb-0">
+                      <div key={log.log_id} className="flex justify-between items-center border-b border-zinc-50 dark:border-zinc-800 pb-3 last:border-0 last:pb-0">
                         <div>
-                          <p className="text-sm font-semibold">{log.food_name}</p>
+                          <p className="text-sm font-semibold dark:text-zinc-200">{log.food_name}</p>
                           <p className="text-xs text-zinc-400 uppercase">{log.meal_type}</p>
                         </div>
-                        <p className="text-sm font-bold">{Math.round(log.calories)} kcal</p>
+                        <p className="text-sm font-bold dark:text-white">{Math.round(log.calories)} kcal</p>
                       </div>
                    ))}
-                   <div className="pt-4 flex justify-between items-center font-bold text-lg">
+                   <div className="pt-4 flex justify-between items-center font-bold text-lg dark:text-white">
                       <span>Total</span>
                       <span>{Math.round(totals.calories)} kcal</span>
                    </div>
@@ -619,12 +647,12 @@ export default function App() {
         )}
 
         {view === 'settings' && (
-          <section className="bg-white p-8 rounded-3xl border border-zinc-100 shadow-sm space-y-8">
+          <section className="bg-white dark:bg-zinc-900 p-8 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm space-y-8">
             <div className="flex justify-between items-center">
-              <h3 className="text-2xl font-bold">Daily Goals</h3>
+              <h3 className="text-2xl font-bold dark:text-white">Daily Goals</h3>
               <button 
                 onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
-                className="text-sm font-bold text-emerald-600 bg-emerald-50 px-4 py-2 rounded-full hover:bg-emerald-100 transition-colors"
+                className="text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 rounded-full hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
               >
                 {isCalculatorOpen ? 'Close Calculator' : 'Calculate for Me'}
               </button>
@@ -634,9 +662,9 @@ export default function App() {
               <motion.div 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                className="bg-zinc-50 p-6 rounded-2xl space-y-4 border border-zinc-100"
+                className="bg-zinc-50 dark:bg-zinc-800/50 p-6 rounded-2xl space-y-4 border border-zinc-100 dark:border-zinc-800"
               >
-                <p className="text-sm text-zinc-500 font-medium">Enter your details to estimate your daily needs.</p>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Enter your details to estimate your daily needs.</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase font-bold text-zinc-400">Weight (kg)</label>
@@ -644,7 +672,7 @@ export default function App() {
                       type="number" 
                       value={calcData.weight}
                       onChange={(e) => setCalcData({...calcData, weight: e.target.value})}
-                      className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
                       placeholder="70"
                     />
                   </div>
@@ -654,7 +682,7 @@ export default function App() {
                       type="number" 
                       value={calcData.height}
                       onChange={(e) => setCalcData({...calcData, height: e.target.value})}
-                      className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
                       placeholder="175"
                     />
                   </div>
@@ -664,7 +692,7 @@ export default function App() {
                       type="number" 
                       value={calcData.age}
                       onChange={(e) => setCalcData({...calcData, age: e.target.value})}
-                      className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
                       placeholder="25"
                     />
                   </div>
@@ -673,7 +701,7 @@ export default function App() {
                     <select 
                       value={calcData.gender}
                       onChange={(e) => setCalcData({...calcData, gender: e.target.value})}
-                      className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
                     >
                       <option value="male">Male</option>
                       <option value="female">Female</option>
@@ -685,7 +713,7 @@ export default function App() {
                   <select 
                     value={calcData.activity}
                     onChange={(e) => setCalcData({...calcData, activity: e.target.value})}
-                    className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
                   >
                     <option value="1.2">Sedentary (Office job, little exercise)</option>
                     <option value="1.375">Lightly Active (1-3 days/week)</option>
@@ -696,7 +724,7 @@ export default function App() {
                 </div>
                 <button 
                   onClick={calculateAndSetGoals}
-                  className="w-full py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-100"
+                  className="w-full py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-100 dark:shadow-none"
                 >
                   Apply Calculated Goals
                 </button>
@@ -712,25 +740,25 @@ export default function App() {
                 { label: 'Fiber (g)', key: 'fiber_goal' },
               ].map((field) => (
                 <div key={field.key} className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-500 uppercase tracking-wider">{field.label}</label>
+                  <label className="text-sm font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">{field.label}</label>
                   <input 
                     type="number"
                     value={goals?.[field.key as keyof DailyGoals] || ''}
                     onChange={(e) => setGoals(prev => prev ? { ...prev, [field.key]: parseFloat(e.target.value) } : null)}
-                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg font-semibold"
+                    className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg font-semibold dark:text-white"
                   />
                 </div>
               ))}
               <button 
                 onClick={() => goals && updateGoals(goals)}
-                className="w-full py-4 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-colors shadow-lg shadow-zinc-200"
+                className="w-full py-4 bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-lg shadow-zinc-200 dark:shadow-none"
               >
                 Save All Goals
               </button>
               
               <button 
                 onClick={() => supabase.auth.signOut()}
-                className="w-full py-4 bg-white text-red-500 border border-red-100 font-bold rounded-2xl hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-4 bg-white dark:bg-zinc-900 text-red-500 border border-red-100 dark:border-red-900/20 font-bold rounded-2xl hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors flex items-center justify-center gap-2"
               >
                 <LogOut size={18} />
                 Sign Out
@@ -741,24 +769,24 @@ export default function App() {
       </main>
 
       {/* Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-zinc-100 px-8 py-4 flex justify-around items-center z-40">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-lg border-t border-zinc-100 dark:border-zinc-800 px-8 py-4 flex justify-around items-center z-40">
         <button 
           onClick={() => setView('today')}
-          className={cn("flex flex-col items-center gap-1 transition-colors", view === 'today' ? "text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}
+          className={cn("flex flex-col items-center gap-1 transition-colors", view === 'today' ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200")}
         >
           <Home size={24} />
           <span className="text-[11px] font-bold uppercase tracking-widest">Home</span>
         </button>
         <button 
           onClick={() => setView('history')}
-          className={cn("flex flex-col items-center gap-1 transition-colors", view === 'history' ? "text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}
+          className={cn("flex flex-col items-center gap-1 transition-colors", view === 'history' ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200")}
         >
           <HistoryIcon size={24} />
           <span className="text-[11px] font-bold uppercase tracking-widest">History</span>
         </button>
         <button 
           onClick={() => setView('settings')}
-          className={cn("flex flex-col items-center gap-1 transition-colors", view === 'settings' ? "text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}
+          className={cn("flex flex-col items-center gap-1 transition-colors", view === 'settings' ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200")}
         >
           <SettingsIcon size={24} />
           <span className="text-[11px] font-bold uppercase tracking-widest">Goals</span>
@@ -787,27 +815,27 @@ export default function App() {
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              className="relative w-full max-w-xl bg-white rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              className="relative w-full max-w-xl bg-white dark:bg-zinc-900 rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
-              <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
-                <h3 className="text-xl font-bold">Add to {activeMealType}</h3>
-                <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
+              <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                <h3 className="text-xl font-bold dark:text-white">Add to {activeMealType}</h3>
+                <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors dark:text-zinc-400">
                   <X size={20} />
                 </button>
               </div>
 
               <div className="p-6 flex-1 overflow-y-auto space-y-6">
                 {!selectedFood && !isCustomMode && (
-                  <div className="flex bg-zinc-100 p-1 rounded-2xl mb-2">
+                  <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-2xl mb-2">
                     <button 
                       onClick={() => setIsCustomMode(false)}
-                      className={cn("flex-1 py-2 text-sm font-bold rounded-xl transition-all", !isCustomMode ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500")}
+                      className={cn("flex-1 py-2 text-sm font-bold rounded-xl transition-all", !isCustomMode ? "bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white" : "text-zinc-500 dark:text-zinc-400")}
                     >
                       Search
                     </button>
                     <button 
                       onClick={() => setIsCustomMode(true)}
-                      className={cn("flex-1 py-2 text-sm font-bold rounded-xl transition-all", isCustomMode ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500")}
+                      className={cn("flex-1 py-2 text-sm font-bold rounded-xl transition-all", isCustomMode ? "bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white" : "text-zinc-500 dark:text-zinc-400")}
                     >
                       Custom
                     </button>
@@ -818,7 +846,7 @@ export default function App() {
                   <div className="space-y-6">
                     <button 
                       onClick={() => setIsCustomMode(false)}
-                      className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-800 transition-colors"
+                      className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
                     >
                       <ArrowLeft size={14} /> Back to search
                     </button>
@@ -830,7 +858,7 @@ export default function App() {
                           placeholder="e.g. Grandma's Special Cake"
                           value={customName}
                           onChange={(e) => setCustomName(e.target.value)}
-                          className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg"
+                          className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg dark:text-white"
                         />
                       </div>
                       <div className="space-y-2">
@@ -840,14 +868,14 @@ export default function App() {
                           placeholder="0"
                           value={customCalories}
                           onChange={(e) => setCustomCalories(e.target.value)}
-                          className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg"
+                          className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg dark:text-white"
                         />
                       </div>
                     </div>
                     <button 
                       onClick={logFood}
                       disabled={!customName || !customCalories}
-                      className="w-full py-5 bg-emerald-500 text-white font-bold text-lg rounded-3xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200 disabled:opacity-50 disabled:shadow-none"
+                      className="w-full py-5 bg-emerald-500 text-white font-bold text-lg rounded-3xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200 dark:shadow-none disabled:opacity-50 disabled:shadow-none"
                     >
                       Log Custom Food
                     </button>
@@ -862,7 +890,7 @@ export default function App() {
                         placeholder="Search food (e.g. Rice, Idli...)"
                         value={searchQuery}
                         onChange={(e) => handleSearch(e.target.value)}
-                        className="w-full pl-12 pr-4 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg"
+                        className="w-full pl-12 pr-4 py-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg dark:text-white"
                       />
                     </div>
                     
@@ -876,10 +904,10 @@ export default function App() {
                             setQuantity('100');
                             setUnitType('grams');
                           }}
-                          className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 rounded-2xl border border-transparent hover:border-zinc-100 transition-all text-left"
+                          className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded-2xl border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700 transition-all text-left"
                         >
                           <div>
-                            <p className="font-semibold text-zinc-800">{food.name}</p>
+                            <p className="font-semibold text-zinc-800 dark:text-zinc-200">{food.name}</p>
                             <p className="text-xs text-zinc-400">
                               {food.calories_per_100g} kcal / 100g • {food.source || 'Local'}
                             </p>
@@ -896,34 +924,34 @@ export default function App() {
                   <div className="space-y-8">
                     <button 
                       onClick={() => setSelectedFood(null)}
-                      className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-800 transition-colors"
+                      className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
                     >
                       <ArrowLeft size={14} /> Back to search
                     </button>
 
                     <div className="space-y-2">
-                      <h4 className="text-2xl font-bold">{selectedFood.name}</h4>
+                      <h4 className="text-2xl font-bold dark:text-white">{selectedFood.name}</h4>
                       <p className="text-zinc-400 uppercase text-xs font-bold tracking-widest">Nutrition per 100g</p>
                       <div className="flex gap-4 text-sm">
-                        <span className="px-2 py-1 bg-zinc-100 rounded-md">P: {selectedFood.protein_per_100g}g</span>
-                        <span className="px-2 py-1 bg-zinc-100 rounded-md">C: {selectedFood.carbs_per_100g}g</span>
-                        <span className="px-2 py-1 bg-zinc-100 rounded-md">F: {selectedFood.fats_per_100g}g</span>
+                        <span className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 rounded-md">P: {selectedFood.protein_per_100g}g</span>
+                        <span className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 rounded-md">C: {selectedFood.carbs_per_100g}g</span>
+                        <span className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 rounded-md">F: {selectedFood.fats_per_100g}g</span>
                       </div>
                     </div>
 
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <label className="text-sm font-bold text-zinc-500 uppercase">Quantity</label>
-                        <div className="flex bg-zinc-100 p-1 rounded-xl">
+                        <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
                           <button 
                             onClick={() => setUnitType('grams')}
-                            className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", unitType === 'grams' ? "bg-white shadow-sm text-zinc-900" : "text-zinc-400")}
+                            className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", unitType === 'grams' ? "bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white" : "text-zinc-400")}
                           >
                             Grams
                           </button>
                           <button 
                             onClick={() => setUnitType('units')}
-                            className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", unitType === 'units' ? "bg-white shadow-sm text-zinc-900" : "text-zinc-400")}
+                            className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", unitType === 'units' ? "bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white" : "text-zinc-400")}
                           >
                             Units
                           </button>
@@ -933,31 +961,31 @@ export default function App() {
                         type="number"
                         value={quantity}
                         onChange={(e) => setQuantity(e.target.value)}
-                        className="w-full p-6 bg-zinc-50 border border-zinc-100 rounded-3xl text-3xl font-bold focus:outline-none focus:ring-4 focus:ring-emerald-500/10"
+                        className="w-full p-6 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-3xl text-3xl font-bold focus:outline-none focus:ring-4 focus:ring-emerald-500/10 dark:text-white"
                       />
                     </div>
 
-                    <div className="bg-emerald-50 p-6 rounded-3xl space-y-4">
-                      <p className="text-emerald-800 font-bold uppercase text-xs tracking-widest">Total Macros</p>
+                    <div className="bg-emerald-50 dark:bg-emerald-900/10 p-6 rounded-3xl space-y-4">
+                      <p className="text-emerald-800 dark:text-emerald-400 font-bold uppercase text-xs tracking-widest">Total Macros</p>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="text-center">
-                          <p className="text-2xl font-bold text-emerald-900">
+                          <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-200">
                             {formatNumber(selectedFood.calories_per_100g * (unitType === 'units' ? parseFloat(quantity || '0') * selectedFood.grams_per_unit : parseFloat(quantity || '0')) / 100)}
                           </p>
-                          <p className="text-[10px] uppercase font-bold text-emerald-600">Calories</p>
+                          <p className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400">Calories</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-2xl font-bold text-emerald-900">
+                          <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-200">
                             {formatNumber(selectedFood.protein_per_100g * (unitType === 'units' ? parseFloat(quantity || '0') * selectedFood.grams_per_unit : parseFloat(quantity || '0')) / 100)}g
                           </p>
-                          <p className="text-[10px] uppercase font-bold text-emerald-600">Protein</p>
+                          <p className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400">Protein</p>
                         </div>
                       </div>
                     </div>
 
                     <button 
                       onClick={logFood}
-                      className="w-full py-5 bg-emerald-500 text-white font-bold text-lg rounded-3xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200"
+                      className="w-full py-5 bg-emerald-500 text-white font-bold text-lg rounded-3xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200 dark:shadow-none"
                     >
                       Log to {activeMealType}
                     </button>
