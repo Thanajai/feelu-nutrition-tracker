@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, X, ChevronDown, ChevronUp, Trash2, Calendar, Settings, History, Home, ArrowLeft, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Plus, X, ChevronDown, ChevronUp, Trash2, Home, ArrowLeft, ArrowRight, LogOut, Settings as SettingsIcon, History as HistoryIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Food, LogEntry, DailyGoals, WeeklyStat } from './types';
-import { cn, formatNumber, getTodayDate, apiFetch } from './utils';
+import { cn, formatNumber, getTodayDate } from './utils';
+import { supabase } from './supabase';
+import Auth from './Auth';
+import { Session } from '@supabase/supabase-js';
 
 // --- Components ---
 
@@ -11,7 +14,7 @@ const ProgressBar = ({ label, current, goal, unit, color }: { label: string, cur
   const percentage = Math.min((current / goal) * 100, 100);
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs font-medium text-zinc-500 uppercase tracking-wider">
+      <div className="flex justify-between text-sm font-medium text-zinc-500 uppercase tracking-wider">
         <span>{label}</span>
         <span>{formatNumber(current)} / {goal} {unit}</span>
       </div>
@@ -105,6 +108,7 @@ const MealSection = ({
 // --- Main App ---
 
 export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
   const [view, setView] = useState<'today' | 'history' | 'settings'>('today');
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -125,20 +129,118 @@ export default function App() {
   const [customCalories, setCustomCalories] = useState('');
 
   useEffect(() => {
-    loadAppData();
-  }, [selectedDate]);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      loadAppData();
+      seedFoodsIfEmpty();
+    }
+  }, [selectedDate, session]);
+
+  const seedFoodsIfEmpty = async () => {
+    try {
+      const { count, error } = await supabase
+        .from('foods')
+        .select('*', { count: 'exact', head: true });
+      
+      if (error) throw error;
+
+      if (count === 0) {
+        const response = await fetch('/foods.json');
+        const foods = await response.json();
+        const { error: insertError } = await supabase.from('foods').insert(foods);
+        if (insertError) throw insertError;
+        console.log('Foods loaded into Supabase');
+      }
+    } catch (err) {
+      console.error('Failed to seed foods:', err);
+    }
+  };
 
   const loadAppData = async () => {
+    if (!session?.user) return;
+    
     try {
-      const [logsRes, goalsRes, statsRes] = await Promise.all([
-        apiFetch(`/api/logs?date=${selectedDate}`),
-        apiFetch(`/api/goals?date=${selectedDate}`),
-        apiFetch('/api/stats/weekly')
-      ]);
+      // Get logs
+      const { data: logsData, error: logsError } = await supabase
+        .from('logs')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .eq('date', selectedDate)
+        .order('created_at', { ascending: true });
       
-      setLogs(await logsRes.json());
-      setGoals(await goalsRes.json());
-      setWeeklyStats(await statsRes.json());
+      if (logsError) throw logsError;
+      setLogs(logsData || []);
+
+      // Get goals
+      const { data: goalsData, error: goalsError } = await supabase
+        .from('daily_goals')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .eq('date', selectedDate)
+        .single();
+      
+      if (goalsError && goalsError.code !== 'PGRST116') throw goalsError;
+      
+      if (goalsData) {
+        setGoals(goalsData);
+      } else {
+        setGoals({
+          date: selectedDate,
+          calorie_goal: 2000,
+          protein_goal: 150,
+          carb_goal: 200,
+          fat_goal: 65,
+          fiber_goal: 30
+        } as DailyGoals);
+      }
+
+      // Get weekly stats (simplified for frontend calculation from logs if needed, 
+      // but let's try to replicate the server logic with Supabase)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
+      const { data: statsData, error: statsError } = await supabase
+        .from('logs')
+        .select('date, calories, protein, carbs, fats, fiber')
+        .eq('user_id', session.user.id)
+        .gte('date', sevenDaysAgoStr);
+      
+      if (statsError) throw statsError;
+
+      // Group by date
+      const grouped = (statsData || []).reduce((acc: any, log) => {
+        if (!acc[log.date]) {
+          acc[log.date] = { 
+            date: log.date, 
+            total_calories: 0, 
+            total_protein: 0, 
+            total_carbs: 0, 
+            total_fats: 0, 
+            total_fiber: 0 
+          };
+        }
+        acc[log.date].total_calories += log.calories;
+        acc[log.date].total_protein += log.protein;
+        acc[log.date].total_carbs += log.carbs;
+        acc[log.date].total_fats += log.fats;
+        acc[log.date].total_fiber += log.fiber;
+        return acc;
+      }, {});
+
+      setWeeklyStats(Object.values(grouped).sort((a: any, b: any) => a.date.localeCompare(b.date)) as WeeklyStat[]);
+
     } catch (err) {
       console.error("Failed to load app data", err);
     }
@@ -153,11 +255,14 @@ export default function App() {
 
     setIsSearching(true);
     try {
-      // Local search
-      const localRes = await apiFetch(`/api/foods/search?q=${encodeURIComponent(q)}`);
-      const localData: Food[] = await localRes.json();
-
-      setSearchResults(localData);
+      const { data, error } = await supabase
+        .from('foods')
+        .select('*')
+        .ilike('name', `%${q}%`)
+        .limit(10);
+      
+      if (error) throw error;
+      setSearchResults(data || []);
     } catch (err) {
       console.error("Search failed", err);
     } finally {
@@ -166,23 +271,25 @@ export default function App() {
   };
 
   const logFood = async () => {
-    if (!selectedFood && !isCustomMode) return;
+    if (!session?.user || (!selectedFood && !isCustomMode)) return;
 
     const qty = parseFloat(quantity);
     const grams = unitType === 'units' ? qty * (selectedFood?.grams_per_unit || 100) : qty;
     const factor = grams / 100;
 
     const entry = isCustomMode ? {
+      user_id: session.user.id,
       date: selectedDate,
       meal_type: activeMealType,
       food_name: customName,
-      quantity_grams: 100, // Default for custom
+      quantity_grams: 100,
       calories: parseFloat(customCalories) || 0,
       protein: 0,
       carbs: 0,
       fats: 0,
       fiber: 0
     } : {
+      user_id: session.user.id,
       date: selectedDate,
       meal_type: activeMealType,
       food_name: selectedFood!.name,
@@ -195,10 +302,9 @@ export default function App() {
     };
 
     try {
-      await apiFetch('/api/logs', {
-        method: 'POST',
-        body: JSON.stringify(entry)
-      });
+      const { error } = await supabase.from('logs').insert(entry);
+      if (error) throw error;
+      
       setIsAddModalOpen(false);
       setSelectedFood(null);
       setSearchQuery('');
@@ -213,7 +319,8 @@ export default function App() {
 
   const deleteLog = async (id: number) => {
     try {
-      await apiFetch(`/api/logs/${id}`, { method: 'DELETE' });
+      const { error } = await supabase.from('logs').delete().eq('log_id', id);
+      if (error) throw error;
       loadAppData();
     } catch (err) {
       console.error("Failed to delete log", err);
@@ -221,17 +328,27 @@ export default function App() {
   };
 
   const updateGoals = async (newGoals: DailyGoals) => {
+    if (!session?.user) return;
     try {
-      await apiFetch('/api/goals', {
-        method: 'POST',
-        body: JSON.stringify(newGoals)
+      const { error } = await supabase.from('daily_goals').upsert({
+        user_id: session.user.id,
+        date: selectedDate,
+        calorie_goal: newGoals.calorie_goal,
+        protein_goal: newGoals.protein_goal,
+        carb_goal: newGoals.carb_goal,
+        fat_goal: newGoals.fat_goal,
+        fiber_goal: newGoals.fiber_goal
       });
+      
+      if (error) throw error;
       setGoals(newGoals);
       setView('today');
     } catch (err) {
       console.error("Failed to update goals", err);
     }
   };
+
+  if (!session) return <Auth />;
 
   const totals = logs.reduce((acc, l) => ({
     calories: acc.calories + l.calories,
@@ -260,21 +377,21 @@ export default function App() {
         </div>
 
         <div className="flex justify-end">
-          <div className="flex items-center gap-1 bg-zinc-100 p-0.5 rounded-lg">
+          <div className="flex items-center gap-2 bg-zinc-100 p-1 rounded-xl">
             <button 
               onClick={() => changeDate(-1)}
-              className="p-1 hover:bg-white hover:shadow-sm rounded-md transition-all"
+              className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all"
             >
-              <ArrowLeft size={14} />
+              <ArrowLeft size={18} />
             </button>
-            <span className="text-[10px] font-bold px-1 min-w-[60px] text-center">
+            <span className="text-sm font-bold px-2 min-w-[80px] text-center">
               {selectedDate === getTodayDate() ? 'Today' : selectedDate.split('-').slice(1).join('/')}
             </span>
             <button 
               onClick={() => changeDate(1)}
-              className="p-1 hover:bg-white hover:shadow-sm rounded-md transition-all"
+              className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all"
             >
-              <ArrowRight size={14} />
+              <ArrowRight size={18} />
             </button>
           </div>
         </div>
@@ -362,7 +479,7 @@ export default function App() {
                       dataKey="date" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 10, fill: '#888' }}
+                      tick={{ fontSize: 12, fill: '#888' }}
                       tickFormatter={(val) => val.split('-').slice(1).join('/')}
                     />
                     <YAxis 
@@ -370,16 +487,16 @@ export default function App() {
                       orientation="left"
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 10, fill: '#888' }} 
-                      label={{ value: 'Macros (g)', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#888' } }}
+                      tick={{ fontSize: 12, fill: '#888' }} 
+                      label={{ value: 'Macros (g)', angle: -90, position: 'insideLeft', style: { fontSize: 12, fill: '#888' } }}
                     />
                     <YAxis 
                       yAxisId="right"
                       orientation="right"
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fontSize: 10, fill: '#888' }}
-                      label={{ value: 'Calories (kcal)', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: '#888' } }}
+                      tick={{ fontSize: 12, fill: '#888' }}
+                      label={{ value: 'Calories (kcal)', angle: 90, position: 'insideRight', style: { fontSize: 12, fill: '#888' } }}
                     />
                     <Tooltip 
                       cursor={{ fill: '#f8f8f8' }}
@@ -463,6 +580,14 @@ export default function App() {
               >
                 Save Goals
               </button>
+              
+              <button 
+                onClick={() => supabase.auth.signOut()}
+                className="w-full py-4 bg-white text-red-500 border border-red-100 font-bold rounded-2xl hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <LogOut size={18} />
+                Sign Out
+              </button>
             </div>
           </section>
         )}
@@ -475,21 +600,28 @@ export default function App() {
           className={cn("flex flex-col items-center gap-1 transition-colors", view === 'today' ? "text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}
         >
           <Home size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-widest">Home</span>
+          <span className="text-[11px] font-bold uppercase tracking-widest">Home</span>
         </button>
         <button 
           onClick={() => setView('history')}
           className={cn("flex flex-col items-center gap-1 transition-colors", view === 'history' ? "text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}
         >
-          <History size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-widest">History</span>
+          <HistoryIcon size={24} />
+          <span className="text-[11px] font-bold uppercase tracking-widest">History</span>
         </button>
         <button 
           onClick={() => setView('settings')}
           className={cn("flex flex-col items-center gap-1 transition-colors", view === 'settings' ? "text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}
         >
-          <Settings size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-widest">Goals</span>
+          <SettingsIcon size={24} />
+          <span className="text-[11px] font-bold uppercase tracking-widest">Goals</span>
+        </button>
+        <button 
+          onClick={() => supabase.auth.signOut()}
+          className="flex flex-col items-center gap-1 text-zinc-400 hover:text-red-500 transition-colors"
+        >
+          <LogOut size={24} />
+          <span className="text-[11px] font-bold uppercase tracking-widest">Exit</span>
         </button>
       </nav>
 

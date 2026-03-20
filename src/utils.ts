@@ -12,13 +12,3 @@ export function formatNumber(num: number) {
 export function getTodayDate() {
   return new Date().toISOString().split('T')[0];
 }
-
-export async function apiFetch(url: string, options: RequestInit = {}) {
-  return fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-}
