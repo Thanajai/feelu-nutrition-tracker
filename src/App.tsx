@@ -128,6 +128,14 @@ export default function App() {
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customCalories, setCustomCalories] = useState('');
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [calcData, setCalcData] = useState({
+    weight: '',
+    height: '',
+    age: '',
+    gender: 'male',
+    activity: '1.2'
+  });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -180,18 +188,20 @@ export default function App() {
       if (logsError) throw logsError;
       setLogs(logsData || []);
 
-      // Get goals
+      // Get goals: fetch the most recent goal record to apply it "globally"
       const { data: goalsData, error: goalsError } = await supabase
         .from('daily_goals')
         .select('*')
         .eq('user_id', session.user.id)
-        .eq('date', selectedDate)
-        .single();
+        .order('date', { ascending: false })
+        .limit(1);
       
-      if (goalsError && goalsError.code !== 'PGRST116') throw goalsError;
+      if (goalsError) throw goalsError;
       
-      if (goalsData) {
-        setGoals(goalsData);
+      const latestGoal = (goalsData && goalsData.length > 0) ? goalsData[0] : null;
+      
+      if (latestGoal) {
+        setGoals(latestGoal);
       } else {
         setGoals({
           date: selectedDate,
@@ -356,6 +366,46 @@ export default function App() {
     } catch (err) {
       console.error("Failed to update goals", err);
     }
+  };
+
+  const calculateAndSetGoals = () => {
+    const w = parseFloat(calcData.weight);
+    const h = parseFloat(calcData.height);
+    const a = parseFloat(calcData.age);
+    const activity = parseFloat(calcData.activity);
+
+    if (!w || !h || !a) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    // Mifflin-St Jeor Equation
+    let bmr = (10 * w) + (6.25 * h) - (5 * a);
+    if (calcData.gender === 'male') {
+      bmr += 5;
+    } else {
+      bmr -= 161;
+    }
+
+    const tdee = Math.round(bmr * activity);
+    
+    // Macro distribution: 30% P, 45% C, 25% F
+    const protein = Math.round((tdee * 0.30) / 4);
+    const carbs = Math.round((tdee * 0.45) / 4);
+    const fats = Math.round((tdee * 0.25) / 9);
+    const fiber = Math.round((tdee / 1000) * 14);
+
+    const newGoals: DailyGoals = {
+      date: selectedDate,
+      calorie_goal: tdee,
+      protein_goal: protein,
+      carb_goal: carbs,
+      fat_goal: fats,
+      fiber_goal: fiber
+    };
+
+    setGoals(newGoals);
+    setIsCalculatorOpen(false);
   };
 
   if (!session) return <Auth />;
@@ -570,7 +620,89 @@ export default function App() {
 
         {view === 'settings' && (
           <section className="bg-white p-8 rounded-3xl border border-zinc-100 shadow-sm space-y-8">
-            <h3 className="text-2xl font-bold">Daily Goals</h3>
+            <div className="flex justify-between items-center">
+              <h3 className="text-2xl font-bold">Daily Goals</h3>
+              <button 
+                onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
+                className="text-sm font-bold text-emerald-600 bg-emerald-50 px-4 py-2 rounded-full hover:bg-emerald-100 transition-colors"
+              >
+                {isCalculatorOpen ? 'Close Calculator' : 'Calculate for Me'}
+              </button>
+            </div>
+
+            {isCalculatorOpen && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="bg-zinc-50 p-6 rounded-2xl space-y-4 border border-zinc-100"
+              >
+                <p className="text-sm text-zinc-500 font-medium">Enter your details to estimate your daily needs.</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-zinc-400">Weight (kg)</label>
+                    <input 
+                      type="number" 
+                      value={calcData.weight}
+                      onChange={(e) => setCalcData({...calcData, weight: e.target.value})}
+                      className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      placeholder="70"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-zinc-400">Height (cm)</label>
+                    <input 
+                      type="number" 
+                      value={calcData.height}
+                      onChange={(e) => setCalcData({...calcData, height: e.target.value})}
+                      className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      placeholder="175"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-zinc-400">Age</label>
+                    <input 
+                      type="number" 
+                      value={calcData.age}
+                      onChange={(e) => setCalcData({...calcData, age: e.target.value})}
+                      className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      placeholder="25"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-zinc-400">Gender</label>
+                    <select 
+                      value={calcData.gender}
+                      onChange={(e) => setCalcData({...calcData, gender: e.target.value})}
+                      className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-zinc-400">Activity Level</label>
+                  <select 
+                    value={calcData.activity}
+                    onChange={(e) => setCalcData({...calcData, activity: e.target.value})}
+                    className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  >
+                    <option value="1.2">Sedentary (Office job, little exercise)</option>
+                    <option value="1.375">Lightly Active (1-3 days/week)</option>
+                    <option value="1.55">Moderately Active (3-5 days/week)</option>
+                    <option value="1.725">Very Active (6-7 days/week)</option>
+                    <option value="1.9">Extra Active (Physical job + heavy training)</option>
+                  </select>
+                </div>
+                <button 
+                  onClick={calculateAndSetGoals}
+                  className="w-full py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-100"
+                >
+                  Apply Calculated Goals
+                </button>
+              </motion.div>
+            )}
+
             <div className="space-y-6">
               {[
                 { label: 'Calories (kcal)', key: 'calorie_goal' },
@@ -593,7 +725,7 @@ export default function App() {
                 onClick={() => goals && updateGoals(goals)}
                 className="w-full py-4 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-colors shadow-lg shadow-zinc-200"
               >
-                Save Goals
+                Save All Goals
               </button>
               
               <button 
