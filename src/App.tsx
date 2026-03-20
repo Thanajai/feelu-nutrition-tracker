@@ -116,6 +116,7 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [activeMealType, setActiveMealType] = useState<LogEntry['meal_type']>('breakfast');
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([]);
+  const [localFoods, setLocalFoods] = useState<Food[]>([]);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -137,35 +138,32 @@ export default function App() {
       setSession(session);
     });
 
+    // Load local foods for search fallback
+    fetch('/foods.json')
+      .then(res => res.json())
+      .then(data => {
+        const mapped = data.map((f: any) => ({
+          name: f.name,
+          calories_per_100g: f.calories,
+          protein_per_100g: f.protein,
+          carbs_per_100g: f.carbs,
+          fats_per_100g: f.fats,
+          fiber_per_100g: f.fiber,
+          serving_unit: f.serving_unit,
+          grams_per_unit: f.grams_per_unit
+        }));
+        setLocalFoods(mapped);
+      })
+      .catch(err => console.error("Failed to load local foods", err));
+
     return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (session) {
       loadAppData();
-      seedFoodsIfEmpty();
     }
   }, [selectedDate, session]);
-
-  const seedFoodsIfEmpty = async () => {
-    try {
-      const { count, error } = await supabase
-        .from('foods')
-        .select('*', { count: 'exact', head: true });
-      
-      if (error) throw error;
-
-      if (count === 0) {
-        const response = await fetch('/foods.json');
-        const foods = await response.json();
-        const { error: insertError } = await supabase.from('foods').insert(foods);
-        if (insertError) throw insertError;
-        console.log('Foods loaded into Supabase');
-      }
-    } catch (err) {
-      console.error('Failed to seed foods:', err);
-    }
-  };
 
   const loadAppData = async () => {
     if (!session?.user) return;
@@ -255,16 +253,28 @@ export default function App() {
 
     setIsSearching(true);
     try {
+      // Try database search first
       const { data, error } = await supabase
         .from('foods')
         .select('*')
         .ilike('name', `%${q}%`)
         .limit(10);
       
-      if (error) throw error;
-      setSearchResults(data || []);
+      if (!error && data && data.length > 0) {
+        setSearchResults(data);
+      } else {
+        // Fallback to local search if database is empty or fails
+        const filtered = localFoods
+          .filter(f => f.name.toLowerCase().includes(q.toLowerCase()))
+          .slice(0, 10);
+        setSearchResults(filtered);
+      }
     } catch (err) {
-      console.error("Search failed", err);
+      console.error("Search failed, using local fallback", err);
+      const filtered = localFoods
+        .filter(f => f.name.toLowerCase().includes(q.toLowerCase()))
+        .slice(0, 10);
+      setSearchResults(filtered);
     } finally {
       setIsSearching(false);
     }
@@ -369,15 +379,22 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zinc-100 px-6 py-4 grid grid-cols-3 items-center">
         <div className="flex justify-start">
-          <span className="text-2xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tighter">FU</span>
+          <span className="text-3xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tighter">FU</span>
         </div>
         
         <div className="flex justify-center">
-          <span className="text-2xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tight">FeelU</span>
+          <span className="text-3xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tight">FeelU</span>
         </div>
 
-        <div className="flex justify-end">
-          <div className="flex items-center gap-2 bg-zinc-100 p-1 rounded-xl">
+        <div className="flex justify-end invisible">
+          <span className="text-3xl font-black">FU</span>
+        </div>
+      </header>
+
+      <main className="max-w-xl mx-auto px-6 py-8 space-y-8">
+        {/* Date selector outside in the center */}
+        <div className="flex justify-center">
+          <div className="flex items-center gap-2 bg-zinc-100 p-1 rounded-xl shadow-sm border border-zinc-200">
             <button 
               onClick={() => changeDate(-1)}
               className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all"
@@ -395,9 +412,7 @@ export default function App() {
             </button>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-xl mx-auto px-6 py-8 space-y-8">
         {view === 'today' && (
           <>
             {/* Dashboard */}

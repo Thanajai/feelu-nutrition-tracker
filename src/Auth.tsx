@@ -36,12 +36,9 @@ export default function Auth() {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white p-8 rounded-[14px] shadow-lg w-full max-w-[375px] flex flex-col items-center"
       >
-        <img 
-          src="/FU_Logo.png" 
-          alt="FeelU" 
-          className="h-[60px] w-auto mb-6"
-          referrerPolicy="no-referrer"
-        />
+        <div className="mb-8">
+          <span className="text-4xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tight">FeelU</span>
+        </div>
         
         <h2 className="text-2xl font-semibold text-gray-900 mb-8">
           {isSignUp ? 'Create Account' : 'Welcome Back'}
