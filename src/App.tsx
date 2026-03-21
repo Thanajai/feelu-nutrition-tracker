@@ -86,9 +86,7 @@ const MealSection = ({
                       <div>
                         <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{log.food_name}</p>
                         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                          {log.logged_unit && log.logged_unit !== 'g' 
-                            ? `${log.logged_quantity} ${log.logged_unit} (${log.quantity_grams}g)` 
-                            : `${log.quantity_grams}g`} • {formatNumber(log.calories)} kcal • P: {formatNumber(log.protein)}g
+                          {log.quantity_grams}g • {formatNumber(log.calories)} kcal • P: {formatNumber(log.protein)}g
                         </p>
                       </div>
                       <button 
@@ -450,8 +448,6 @@ export default function App() {
         meal_type: activeMealType,
         food_name: foodToLog.name,
         quantity_grams: grams,
-        logged_quantity: qty,
-        logged_unit: unitType === 'units' ? foodToLog.serving_unit : 'g',
         calories: foodToLog.calories_per_100g * factor,
         protein: foodToLog.protein_per_100g * factor,
         carbs: foodToLog.carbs_per_100g * factor,
