@@ -1,14 +1,23 @@
 import React, { useState } from 'react';
 import { supabase } from './supabase';
 import { motion } from 'motion/react';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, User } from 'lucide-react';
 
 export default function Auth({ darkMode, setDarkMode }: { darkMode: boolean, setDarkMode: (v: boolean) => void }) {
   const [isSignUp, setIsSignUp] = useState(false);
+  const [emailOrUsername, setEmailOrUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const validateUsername = (name: string) => {
+    if (name.length < 3) return 'Username must be at least 3 characters';
+    if (name.length > 20) return 'Username must be at most 20 characters';
+    if (!/^[a-zA-Z0-9_]+$/.test(name)) return 'Only letters, numbers, and underscores allowed';
+    return null;
+  };
 
   const handle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,12 +25,60 @@ export default function Auth({ darkMode, setDarkMode }: { darkMode: boolean, set
     setError('');
     
     try {
-      const { error } = isSignUp
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
-      
-      if (error) {
-        setError(error.message);
+      if (isSignUp) {
+        // Validate username first
+        const validationError = validateUsername(username);
+        if (validationError) {
+          setError(validationError);
+          setLoading(false);
+          return;
+        }
+
+        // Check if username taken
+        const { data: existing } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('username', username)
+          .single();
+        
+        if (existing) {
+          setError('Username already taken');
+          setLoading(false);
+          return;
+        }
+
+        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+        if (signUpError) throw signUpError;
+        
+        if (data.user) {
+          // Success - Create profile
+          const { error: profileError } = await supabase.from('profiles').insert({
+            id: data.user.id,
+            username: username,
+            email: email
+          });
+          if (profileError) throw profileError;
+        }
+      } else {
+        let loginEmail = emailOrUsername;
+        if (!emailOrUsername.includes('@')) {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('username', emailOrUsername)
+            .single();
+          
+          if (profileError || !profile) {
+            throw new Error('Username not found');
+          }
+          loginEmail = profile.email;
+        }
+
+        const { error } = await supabase.auth.signInWithPassword({ 
+          email: loginEmail, 
+          password 
+        });
+        if (error) throw error;
       }
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred');
@@ -55,14 +112,27 @@ export default function Auth({ darkMode, setDarkMode }: { darkMode: boolean, set
         </h2>
         
         <form onSubmit={handle} className="w-full space-y-4">
+          {isSignUp && (
+            <div>
+              <input
+                type="text"
+                placeholder="Username"
+                required
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#10B981] focus:border-transparent transition-all"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+              />
+            </div>
+          )}
+          
           <div>
             <input
-              type="email"
-              placeholder="Email"
+              type={isSignUp ? "email" : "text"}
+              placeholder={isSignUp ? "Email" : "Email or Username"}
               required
               className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#10B981] focus:border-transparent transition-all"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              value={isSignUp ? email : emailOrUsername}
+              onChange={e => isSignUp ? setEmail(e.target.value) : setEmailOrUsername(e.target.value)}
             />
           </div>
           

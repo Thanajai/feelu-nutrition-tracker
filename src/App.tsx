@@ -22,6 +22,7 @@ const ProgressBar = ({ label, current, goal, unit, color }: { label: string, cur
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width: `${percentage}%` }}
+          transition={{ type: "spring", stiffness: 50, damping: 15 }}
           className={cn("h-full rounded-full", color)}
         />
       </div>
@@ -73,22 +74,30 @@ const MealSection = ({
               {mealLogs.length === 0 ? (
                 <p className="text-sm text-zinc-400 italic py-2">No items logged yet.</p>
               ) : (
-                mealLogs.map(log => (
-                  <div key={log.log_id} className="flex items-center justify-between group">
-                    <div>
-                      <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{log.food_name}</p>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {log.quantity_grams}g • {formatNumber(log.calories)} kcal • P: {formatNumber(log.protein)}g
-                      </p>
-                    </div>
-                    <button 
-                      onClick={() => onDelete(log.log_id)}
-                      className="p-1.5 text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                <div className="space-y-3">
+                  {mealLogs.map((log, index) => (
+                    <motion.div 
+                      key={log.log_id} 
+                      initial={{ x: -10, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="flex items-center justify-between group"
                     >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))
+                      <div>
+                        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{log.food_name}</p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                          {log.quantity_grams}g • {formatNumber(log.calories)} kcal • P: {formatNumber(log.protein)}g
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => onDelete(log.log_id)}
+                        className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </motion.div>
+                  ))}
+                </div>
               )}
               <button 
                 onClick={onAddClick}
@@ -125,6 +134,8 @@ export default function App() {
   const [activeMealType, setActiveMealType] = useState<LogEntry['meal_type']>('breakfast');
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([]);
   const [localFoods, setLocalFoods] = useState<Food[]>([]);
+  const [profile, setProfile] = useState<{ username: string, created_at: string } | null>(null);
+  const [logStats, setLogStats] = useState<{ totalDays: number, totalCalories: number }>({ totalDays: 0, totalCalories: 0 });
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -134,8 +145,14 @@ export default function App() {
   const [unitType, setUnitType] = useState<'grams' | 'units'>('grams');
   const [isSearching, setIsSearching] = useState(false);
   const [isCustomMode, setIsCustomMode] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customCalories, setCustomCalories] = useState('');
+  const [customProtein, setCustomProtein] = useState('0');
+  const [customCarbs, setCustomCarbs] = useState('0');
+  const [customFats, setCustomFats] = useState('0');
+  const [customFiber, setCustomFiber] = useState('0');
+  const [customServingSize, setCustomServingSize] = useState('100');
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [calcData, setCalcData] = useState({
     weight: '',
@@ -154,6 +171,50 @@ export default function App() {
     }
     console.log('Theme changed:', darkMode ? 'dark' : 'light');
   }, [darkMode]);
+
+  useEffect(() => {
+    if (session?.user) {
+      const fetchProfileData = async () => {
+        const { data: profileData, error: fetchError } = await supabase
+          .from('profiles')
+          .select('username, created_at')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profileData) {
+          setProfile(profileData);
+        } else if (fetchError?.code === 'PGRST116') {
+          // Profile doesn't exist, create it lazily
+          const defaultUsername = session.user.email?.split('@')[0] || `user_${session.user.id.slice(0, 5)}`;
+          const { data: newProfile, error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id: session.user.id,
+              username: defaultUsername,
+              email: session.user.email
+            })
+            .select()
+            .single();
+          
+          if (!insertError && newProfile) {
+            setProfile(newProfile);
+          }
+        }
+
+        const { data: logsData } = await supabase
+          .from('logs')
+          .select('date, calories')
+          .eq('user_id', session.user.id);
+
+        if (logsData) {
+          const totalDays = [...new Set(logsData.map(l => l.date))].length;
+          const totalCalories = logsData.reduce((sum, l) => sum + l.calories, 0);
+          setLogStats({ totalDays, totalCalories });
+        }
+      };
+      fetchProfileData();
+    }
+  }, [session]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -286,24 +347,41 @@ export default function App() {
 
     setIsSearching(true);
     try {
-      // Try database search first
-      const { data, error } = await supabase
-        .from('foods')
-        .select('*')
-        .ilike('name', `%${q}%`)
-        .limit(10);
-      
-      if (!error && data && data.length > 0) {
-        setSearchResults(data);
-      } else {
-        // Fallback to local search if database is empty or fails
-        const filtered = localFoods
-          .filter(f => f.name.toLowerCase().includes(q.toLowerCase()))
-          .slice(0, 10);
-        setSearchResults(filtered);
+      // 1. Search local foods
+      const localResults = localFoods
+        .filter(f => f.name.toLowerCase().includes(q.toLowerCase()))
+        .map(f => ({ ...f, source: 'Local' }))
+        .slice(0, 10);
+
+      // 2. Search custom foods in Supabase
+      let customResults: Food[] = [];
+      if (session?.user) {
+        const { data, error } = await supabase
+          .from('custom_foods')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .ilike('name', `%${q}%`);
+        
+        if (!error && data) {
+          customResults = data.map(f => ({
+            name: f.name,
+            calories_per_100g: f.calories_per_100g,
+            protein_per_100g: f.protein_per_100g,
+            carbs_per_100g: f.carbs_per_100g,
+            fats_per_100g: f.fats_per_100g,
+            fiber_per_100g: f.fiber_per_100g,
+            serving_unit: f.serving_unit,
+            grams_per_unit: f.grams_per_unit,
+            source: 'Custom'
+          }));
+        }
       }
+
+      // Merge results: Custom foods first
+      const merged = [...customResults, ...localResults].slice(0, 15);
+      setSearchResults(merged);
     } catch (err) {
-      console.error("Search failed, using local fallback", err);
+      console.error("Search failed", err);
       const filtered = localFoods
         .filter(f => f.name.toLowerCase().includes(q.toLowerCase()))
         .slice(0, 10);
@@ -316,47 +394,84 @@ export default function App() {
   const logFood = async () => {
     if (!session?.user || (!selectedFood && !isCustomMode)) return;
 
-    const qty = parseFloat(quantity);
-    const grams = unitType === 'units' ? qty * (selectedFood?.grams_per_unit || 100) : qty;
-    const factor = grams / 100;
-
-    const entry = isCustomMode ? {
-      user_id: session.user.id,
-      date: selectedDate,
-      meal_type: activeMealType,
-      food_name: customName,
-      quantity_grams: 100,
-      calories: parseFloat(customCalories) || 0,
-      protein: 0,
-      carbs: 0,
-      fats: 0,
-      fiber: 0
-    } : {
-      user_id: session.user.id,
-      date: selectedDate,
-      meal_type: activeMealType,
-      food_name: selectedFood!.name,
-      quantity_grams: grams,
-      calories: selectedFood!.calories_per_100g * factor,
-      protein: selectedFood!.protein_per_100g * factor,
-      carbs: selectedFood!.carbs_per_100g * factor,
-      fats: selectedFood!.fats_per_100g * factor,
-      fiber: selectedFood!.fiber_per_100g * factor
-    };
-
+    setLoading(true);
     try {
-      const { error } = await supabase.from('logs').insert(entry);
-      if (error) throw error;
+      let foodToLog: Food;
+
+      if (isCustomMode) {
+        // Step 1: Save to custom_foods table
+        const customFoodData = {
+          user_id: session.user.id,
+          name: customName,
+          calories_per_100g: parseFloat(customCalories) || 0,
+          protein_per_100g: parseFloat(customProtein) || 0,
+          carbs_per_100g: parseFloat(customCarbs) || 0,
+          fats_per_100g: parseFloat(customFats) || 0,
+          fiber_per_100g: parseFloat(customFiber) || 0,
+          serving_unit: 'g',
+          grams_per_unit: parseFloat(customServingSize) || 100
+        };
+
+        const { data: newCustomFood, error: customError } = await supabase
+          .from('custom_foods')
+          .insert(customFoodData)
+          .select()
+          .single();
+
+        if (customError) throw customError;
+
+        foodToLog = {
+          name: newCustomFood.name,
+          calories_per_100g: newCustomFood.calories_per_100g,
+          protein_per_100g: newCustomFood.protein_per_100g,
+          carbs_per_100g: newCustomFood.carbs_per_100g,
+          fats_per_100g: newCustomFood.fats_per_100g,
+          fiber_per_100g: newCustomFood.fiber_per_100g,
+          serving_unit: newCustomFood.serving_unit,
+          grams_per_unit: newCustomFood.grams_per_unit,
+          source: 'Custom'
+        };
+      } else {
+        foodToLog = selectedFood!;
+      }
+
+      // Step 2: Log to logs table
+      const qty = parseFloat(quantity);
+      const grams = unitType === 'units' ? qty * (foodToLog.grams_per_unit || 100) : qty;
+      const factor = grams / 100;
+
+      const entry = {
+        user_id: session.user.id,
+        date: selectedDate,
+        meal_type: activeMealType,
+        food_name: foodToLog.name,
+        quantity_grams: grams,
+        calories: foodToLog.calories_per_100g * factor,
+        protein: foodToLog.protein_per_100g * factor,
+        carbs: foodToLog.carbs_per_100g * factor,
+        fats: foodToLog.fats_per_100g * factor,
+        fiber: foodToLog.fiber_per_100g * factor
+      };
+
+      const { error: logError } = await supabase.from('logs').insert(entry);
+      if (logError) throw logError;
       
       setIsAddModalOpen(false);
       setSelectedFood(null);
       setSearchQuery('');
       setCustomName('');
       setCustomCalories('');
+      setCustomProtein('0');
+      setCustomCarbs('0');
+      setCustomFats('0');
+      setCustomFiber('0');
+      setCustomServingSize('100');
       setIsCustomMode(false);
       loadAppData();
     } catch (err) {
       console.error("Failed to log food", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -452,7 +567,12 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-100 dark:border-zinc-800 px-6 py-4 grid grid-cols-3 items-center">
         <div className="flex justify-start">
-          <span className="text-3xl font-black bg-linear-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent tracking-tighter">FU</span>
+          <img 
+            src="/pwa-icon.svg" 
+            alt="FeelU Icon" 
+            className="w-8 h-8"
+            referrerPolicy="no-referrer"
+          />
         </div>
         
         <div className="flex justify-center">
@@ -470,6 +590,13 @@ export default function App() {
       </header>
 
       <main className="max-w-xl mx-auto px-6 py-8 space-y-8">
+        {/* Greeting */}
+        {view === 'today' && profile?.username && (
+          <div className="flex justify-start -ml-2">
+            <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Hi, {profile.username}</span>
+          </div>
+        )}
+
         {/* Date selector outside in the center */}
         {view === 'today' && (
           <div className="flex justify-center">
@@ -494,7 +621,11 @@ export default function App() {
         )}
 
         {view === 'today' && (
-          <>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-8"
+          >
             {/* Dashboard */}
             <section className="bg-white dark:bg-zinc-900 p-6 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm space-y-6">
               <div className="flex items-end justify-between">
@@ -509,10 +640,13 @@ export default function App() {
                 </div>
                 <div className="w-16 h-16 rounded-full border-4 border-zinc-100 dark:border-zinc-800 flex items-center justify-center relative">
                    <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
-                      <circle 
+                      <motion.circle 
                         cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="8" 
                         className="text-emerald-500" 
-                        strokeDasharray={`${Math.min((totals.calories / (goals?.calorie_goal || 2000)) * 283, 283)} 283`}
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: Math.min(totals.calories / (goals?.calorie_goal || 2000), 1) }}
+                        transition={{ duration: 1, ease: "easeOut" }}
+                        strokeDasharray="283"
                         strokeLinecap="round"
                       />
                    </svg>
@@ -559,7 +693,7 @@ export default function App() {
                 onDelete={deleteLog}
               />
             </div>
-          </>
+          </motion.div>
         )}
 
         {view === 'history' && (
@@ -773,25 +907,48 @@ export default function App() {
               <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-600 dark:text-zinc-400">
                 <User size={20} />
               </div>
-              <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Account</h2>
+              <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Profile</h2>
             </div>
 
             <div className="bg-white dark:bg-zinc-900 p-8 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col items-center text-center">
-              <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center text-emerald-500 mb-6">
-                <User size={40} />
+              <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center text-white text-4xl font-black mb-6 shadow-xl shadow-emerald-100 dark:shadow-none">
+                {profile?.username?.[0]?.toUpperCase() || session?.user?.email?.[0]?.toUpperCase()}
               </div>
-              <p className="text-zinc-400 text-sm font-bold uppercase tracking-widest mb-1">Signed in as</p>
-              <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-8">
-                {session?.user?.email}
-              </h3>
               
-              <button 
-                onClick={() => setIsSignOutModalOpen(true)}
-                className="w-full py-4 bg-red-50 dark:bg-red-900/10 text-red-500 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2"
-              >
-                <LogOut size={18} />
-                Sign Out
-              </button>
+              <h3 className="text-3xl font-black text-zinc-900 dark:text-white mb-1">
+                {profile?.username || session?.user?.email?.split('@')[0] || 'User'}
+              </h3>
+              <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-8 font-medium">
+                {session?.user?.email}
+              </p>
+
+              <div className="grid grid-cols-2 gap-4 w-full mb-8">
+                <div className="bg-zinc-50 dark:bg-zinc-800/50 p-5 rounded-2xl border border-zinc-100 dark:border-zinc-800">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Days Logged</p>
+                  <p className="text-2xl font-black text-zinc-900 dark:text-white">{logStats.totalDays}</p>
+                </div>
+                <div className="bg-zinc-50 dark:bg-zinc-800/50 p-5 rounded-2xl border border-zinc-100 dark:border-zinc-800">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Total Calories</p>
+                  <p className="text-2xl font-black text-zinc-900 dark:text-white">{Math.round(logStats.totalCalories)}</p>
+                </div>
+              </div>
+
+              <div className="w-full space-y-4">
+                <div className="flex items-center justify-between px-2 text-xs font-bold text-zinc-400 uppercase tracking-widest">
+                  <span>Joined</span>
+                  <span className="text-zinc-900 dark:text-zinc-100">
+                    {new Date(profile?.created_at || session?.user?.created_at || Date.now()).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </span>
+                </div>
+                
+                <button 
+                  onClick={() => setIsSignOutModalOpen(true)}
+                  className="w-full py-4 bg-red-50 dark:bg-red-900/10 text-red-500 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2 mt-4"
+                >
+                  <LogOut size={18} />
+                  Sign Out
+                </button>
+              </div>
             </div>
           </section>
         )}
@@ -881,7 +1038,7 @@ export default function App() {
                     </button>
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Food Name</label>
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Food Name</label>
                         <input 
                           type="text"
                           placeholder="e.g. Grandma's Special Cake"
@@ -889,9 +1046,13 @@ export default function App() {
                           onChange={(e) => setCustomName(e.target.value)}
                           className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg dark:text-white"
                         />
+                        {customName.length > 0 && customName.length < 2 && (
+                          <p className="text-[10px] text-rose-500 font-bold uppercase tracking-wider">Minimum 2 characters</p>
+                        )}
                       </div>
+
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Calories (kcal)</label>
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Calories (kcal per 100g)</label>
                         <input 
                           type="number"
                           placeholder="0"
@@ -899,14 +1060,69 @@ export default function App() {
                           onChange={(e) => setCustomCalories(e.target.value)}
                           className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg dark:text-white"
                         />
+                        {customCalories.length > 0 && parseFloat(customCalories) <= 0 && (
+                          <p className="text-[10px] text-rose-500 font-bold uppercase tracking-wider">Must be greater than 0</p>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Protein (g)</label>
+                          <input 
+                            type="number"
+                            value={customProtein}
+                            onChange={(e) => setCustomProtein(e.target.value)}
+                            className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Carbs (g)</label>
+                          <input 
+                            type="number"
+                            value={customCarbs}
+                            onChange={(e) => setCustomCarbs(e.target.value)}
+                            className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Fats (g)</label>
+                          <input 
+                            type="number"
+                            value={customFats}
+                            onChange={(e) => setCustomFats(e.target.value)}
+                            className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Fiber (g)</label>
+                          <input 
+                            type="number"
+                            value={customFiber}
+                            onChange={(e) => setCustomFiber(e.target.value)}
+                            className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Serving Size (g per unit)</label>
+                        <input 
+                          type="number"
+                          value={customServingSize}
+                          onChange={(e) => setCustomServingSize(e.target.value)}
+                          className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:text-white"
+                        />
                       </div>
                     </div>
                     <button 
                       onClick={logFood}
-                      disabled={!customName || !customCalories}
+                      disabled={loading || customName.length < 2 || !customCalories || parseFloat(customCalories) <= 0}
                       className="w-full py-5 bg-emerald-500 text-white font-bold text-lg rounded-3xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200 dark:shadow-none disabled:opacity-50 disabled:shadow-none"
                     >
-                      Log Custom Food
+                      {loading ? 'Saving...' : 'Log Custom Food'}
                     </button>
                   </div>
                 ) : !selectedFood ? (
@@ -935,8 +1151,13 @@ export default function App() {
                           }}
                           className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded-2xl border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700 transition-all text-left"
                         >
-                          <div>
-                            <p className="font-semibold text-zinc-800 dark:text-zinc-200">{food.name}</p>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-zinc-800 dark:text-zinc-200">{food.name}</p>
+                              {food.source === 'Custom' && (
+                                <span className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-md border border-emerald-200 dark:border-emerald-800">Custom</span>
+                              )}
+                            </div>
                             <p className="text-xs text-zinc-400">
                               {food.calories_per_100g} kcal / 100g • {food.source || 'Local'}
                             </p>
