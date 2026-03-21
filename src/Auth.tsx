@@ -1,3 +1,5 @@
+// NEVER use window.fetch = ... 
+// Always use the http() wrapper defined in utils.ts
 import React, { useState } from 'react';
 import { supabase } from './supabase';
 import { motion } from 'motion/react';

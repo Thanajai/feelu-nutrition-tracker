@@ -1,9 +1,11 @@
+// NEVER use window.fetch = ... 
+// Always use the http() wrapper defined in utils.ts
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, X, ChevronDown, ChevronUp, Trash2, Home, ArrowLeft, ArrowRight, LogOut, Settings as SettingsIcon, History as HistoryIcon, Sun, Moon, User, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Food, LogEntry, DailyGoals, WeeklyStat } from './types';
-import { cn, formatNumber, getTodayDate } from './utils';
+import { cn, formatNumber, getTodayDate, formatDate, http } from './utils';
 import { supabase } from './supabase';
 import Auth from './Auth';
 import { Session } from '@supabase/supabase-js';
@@ -233,7 +235,7 @@ export default function App() {
     });
 
     // Load local foods for search fallback
-    fetch('/foods.json')
+    http('/foods.json')
       .then(res => res.json())
       .then(data => {
         const mapped = data.map((f: any) => ({
@@ -303,7 +305,7 @@ export default function App() {
       // but let's try to replicate the server logic with Supabase)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+      const sevenDaysAgoStr = formatDate(sevenDaysAgo);
 
       const { data: statsData, error: statsError } = await supabase
         .from('logs')
@@ -601,9 +603,10 @@ export default function App() {
   }), { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0 });
 
   const changeDate = (days: number) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    date.setDate(date.getDate() + days);
+    setSelectedDate(formatDate(date));
   };
 
   return (
