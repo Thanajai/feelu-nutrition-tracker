@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, X, ChevronDown, ChevronUp, Trash2, Home, ArrowLeft, ArrowRight, LogOut, Settings as SettingsIcon, History as HistoryIcon, Sun, Moon } from 'lucide-react';
+import { Search, Plus, X, ChevronDown, ChevronUp, Trash2, Home, ArrowLeft, ArrowRight, LogOut, Settings as SettingsIcon, History as HistoryIcon, Sun, Moon, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Food, LogEntry, DailyGoals, WeeklyStat } from './types';
@@ -116,11 +116,12 @@ export default function App() {
     }
     return false;
   });
-  const [view, setView] = useState<'today' | 'history' | 'settings'>('today');
+  const [view, setView] = useState<'today' | 'history' | 'settings' | 'account'>('today');
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [goals, setGoals] = useState<DailyGoals | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSignOutModalOpen, setIsSignOutModalOpen] = useState(false);
   const [activeMealType, setActiveMealType] = useState<LogEntry['meal_type']>('breakfast');
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([]);
   const [localFoods, setLocalFoods] = useState<Food[]>([]);
@@ -161,6 +162,11 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session) {
+        setView('today');
+      } else {
+        setIsSignOutModalOpen(false);
+      }
     });
 
     // Load local foods for search fallback
@@ -465,25 +471,27 @@ export default function App() {
 
       <main className="max-w-xl mx-auto px-6 py-8 space-y-8">
         {/* Date selector outside in the center */}
-        <div className="flex justify-center">
-          <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 transition-colors">
-            <button 
-              onClick={() => changeDate(-1)}
-              className="p-2 hover:bg-white dark:hover:bg-zinc-700 hover:shadow-sm rounded-lg transition-all dark:text-zinc-300"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <span className="text-sm font-bold px-2 min-w-[80px] text-center dark:text-white">
-              {selectedDate === getTodayDate() ? 'Today' : selectedDate.split('-').slice(1).join('/')}
-            </span>
-            <button 
-              onClick={() => changeDate(1)}
-              className="p-2 hover:bg-white dark:hover:bg-zinc-700 hover:shadow-sm rounded-lg transition-all dark:text-zinc-300"
-            >
-              <ArrowRight size={18} />
-            </button>
+        {view === 'today' && (
+          <div className="flex justify-center">
+            <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 transition-colors">
+              <button 
+                onClick={() => changeDate(-1)}
+                className="p-2 hover:bg-white dark:hover:bg-zinc-700 hover:shadow-sm rounded-lg transition-all dark:text-zinc-300"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <span className="text-sm font-bold px-2 min-w-[80px] text-center dark:text-white">
+                {selectedDate === getTodayDate() ? 'Today' : selectedDate.split('-').slice(1).join('/')}
+              </span>
+              <button 
+                onClick={() => changeDate(1)}
+                className="p-2 hover:bg-white dark:hover:bg-zinc-700 hover:shadow-sm rounded-lg transition-all dark:text-zinc-300"
+              >
+                <ArrowRight size={18} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {view === 'today' && (
           <>
@@ -755,10 +763,31 @@ export default function App() {
               >
                 Save All Goals
               </button>
+            </div>
+          </section>
+        )}
+
+        {view === 'account' && (
+          <section className="space-y-8 pb-24">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-600 dark:text-zinc-400">
+                <User size={20} />
+              </div>
+              <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Account</h2>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 p-8 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col items-center text-center">
+              <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center text-emerald-500 mb-6">
+                <User size={40} />
+              </div>
+              <p className="text-zinc-400 text-sm font-bold uppercase tracking-widest mb-1">Signed in as</p>
+              <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-8">
+                {session?.user?.email}
+              </h3>
               
               <button 
-                onClick={() => supabase.auth.signOut()}
-                className="w-full py-4 bg-white dark:bg-zinc-900 text-red-500 border border-red-100 dark:border-red-900/20 font-bold rounded-2xl hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors flex items-center justify-center gap-2"
+                onClick={() => setIsSignOutModalOpen(true)}
+                className="w-full py-4 bg-red-50 dark:bg-red-900/10 text-red-500 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2"
               >
                 <LogOut size={18} />
                 Sign Out
@@ -792,11 +821,11 @@ export default function App() {
           <span className="text-[11px] font-bold uppercase tracking-widest">Goals</span>
         </button>
         <button 
-          onClick={() => supabase.auth.signOut()}
-          className="flex flex-col items-center gap-1 text-zinc-400 hover:text-red-500 transition-colors"
+          onClick={() => setView('account')}
+          className={cn("flex flex-col items-center gap-1 transition-colors", view === 'account' ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200")}
         >
-          <LogOut size={24} />
-          <span className="text-[11px] font-bold uppercase tracking-widest">Exit</span>
+          <User size={24} />
+          <span className="text-[11px] font-bold uppercase tracking-widest">Account</span>
         </button>
       </nav>
 
@@ -991,6 +1020,54 @@ export default function App() {
                     </button>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Sign Out Confirmation Modal */}
+      <AnimatePresence>
+        {isSignOutModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSignOutModalOpen(false)}
+              className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-sm bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl overflow-hidden border border-zinc-100 dark:border-zinc-800 p-8"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-2xl flex items-center justify-center text-red-500 mb-6">
+                  <LogOut size={32} />
+                </div>
+                <h3 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">Sign Out?</h3>
+                <p className="text-zinc-500 dark:text-zinc-400 mb-8">
+                  Are you sure you want to exit? You'll need to sign in again to access your data.
+                </p>
+                <div className="grid grid-cols-2 gap-4 w-full">
+                  <button 
+                    onClick={() => setIsSignOutModalOpen(false)}
+                    className="py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold rounded-2xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                      supabase.auth.signOut();
+                      setIsSignOutModalOpen(false);
+                    }}
+                    className="py-4 bg-red-500 text-white font-bold rounded-2xl hover:bg-red-600 transition-colors shadow-lg shadow-red-200 dark:shadow-none"
+                  >
+                    Sign Out
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
