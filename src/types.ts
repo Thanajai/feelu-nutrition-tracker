@@ -17,6 +17,8 @@ export interface LogEntry {
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
   food_name: string;
   quantity_grams: number;
+  logged_quantity?: number;
+  logged_unit?: string;
   calories: number;
   protein: number;
   carbs: number;
@@ -26,6 +28,7 @@ export interface LogEntry {
 }
 
 export interface DailyGoals {
+  goal_id?: number;
   date: string;
   calorie_goal: number;
   protein_goal: number;

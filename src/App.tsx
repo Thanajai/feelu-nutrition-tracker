@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, X, ChevronDown, ChevronUp, Trash2, Home, ArrowLeft, ArrowRight, LogOut, Settings as SettingsIcon, History as HistoryIcon, Sun, Moon, User } from 'lucide-react';
+import { Search, Plus, X, ChevronDown, ChevronUp, Trash2, Home, ArrowLeft, ArrowRight, LogOut, Settings as SettingsIcon, History as HistoryIcon, Sun, Moon, User, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Food, LogEntry, DailyGoals, WeeklyStat } from './types';
@@ -86,7 +86,9 @@ const MealSection = ({
                       <div>
                         <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{log.food_name}</p>
                         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                          {log.quantity_grams}g • {formatNumber(log.calories)} kcal • P: {formatNumber(log.protein)}g
+                          {log.logged_unit && log.logged_unit !== 'g' 
+                            ? `${log.logged_quantity} ${log.logged_unit} (${log.quantity_grams}g)` 
+                            : `${log.quantity_grams}g`} • {formatNumber(log.calories)} kcal • P: {formatNumber(log.protein)}g
                         </p>
                       </div>
                       <button 
@@ -131,6 +133,8 @@ export default function App() {
   const [goals, setGoals] = useState<DailyGoals | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSignOutModalOpen, setIsSignOutModalOpen] = useState(false);
+  const [isSavingGoals, setIsSavingGoals] = useState(false);
+  const [showSavedToast, setShowSavedToast] = useState(false);
   const [activeMealType, setActiveMealType] = useState<LogEntry['meal_type']>('breakfast');
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([]);
   const [localFoods, setLocalFoods] = useState<Food[]>([]);
@@ -446,6 +450,8 @@ export default function App() {
         meal_type: activeMealType,
         food_name: foodToLog.name,
         quantity_grams: grams,
+        logged_quantity: qty,
+        logged_unit: unitType === 'units' ? foodToLog.serving_unit : 'g',
         calories: foodToLog.calories_per_100g * factor,
         protein: foodToLog.protein_per_100g * factor,
         carbs: foodToLog.carbs_per_100g * factor,
@@ -487,8 +493,9 @@ export default function App() {
 
   const updateGoals = async (newGoals: DailyGoals) => {
     if (!session?.user) return;
+    setIsSavingGoals(true);
     try {
-      const { error } = await supabase.from('daily_goals').upsert({
+      const payload = {
         user_id: session.user.id,
         date: selectedDate,
         calorie_goal: newGoals.calorie_goal,
@@ -496,13 +503,47 @@ export default function App() {
         carb_goal: newGoals.carb_goal,
         fat_goal: newGoals.fat_goal,
         fiber_goal: newGoals.fiber_goal
-      });
+      };
+
+      // Use onConflict to target the unique constraint on user_id and date
+      // This ensures that if a goal already exists for this date, it gets updated
+      const { error } = await supabase
+        .from('daily_goals')
+        .upsert(payload, { onConflict: 'user_id,date' });
       
       if (error) throw error;
-      setGoals(newGoals);
-      setView('today');
+      
+      // Refresh goals for the current date
+      const { data: refreshedGoals } = await supabase
+        .from('daily_goals')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .eq('date', selectedDate)
+        .limit(1);
+
+      if (refreshedGoals && refreshedGoals.length > 0) {
+        setGoals(refreshedGoals[0]);
+      } else {
+        // Fallback to the latest goal globally if the specific date fetch fails
+        const { data: latestGoalData } = await supabase
+          .from('daily_goals')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .order('date', { ascending: false })
+          .limit(1);
+        
+        if (latestGoalData && latestGoalData.length > 0) {
+          setGoals(latestGoalData[0]);
+        }
+      }
+
+      setShowSavedToast(true);
+      setTimeout(() => setShowSavedToast(false), 3000);
     } catch (err) {
       console.error("Failed to update goals", err);
+      alert("Failed to save goals. Please try again.");
+    } finally {
+      setIsSavingGoals(false);
     }
   };
 
@@ -527,10 +568,17 @@ export default function App() {
 
     const tdee = Math.round(bmr * activity);
     
-    // Macro distribution: 30% P, 45% C, 25% F
-    const protein = Math.round((tdee * 0.30) / 4);
-    const carbs = Math.round((tdee * 0.45) / 4);
+    // Macro distribution: Protein based on activity level (g/kg), 25% Fats, remaining Carbs
+    let proteinPerKg = 1.0;
+    if (activity <= 1.2) proteinPerKg = 1.0;
+    else if (activity <= 1.375) proteinPerKg = 1.2; // User requested 1.2g/kg for light activity
+    else if (activity <= 1.55) proteinPerKg = 1.5;
+    else if (activity <= 1.725) proteinPerKg = 1.8;
+    else proteinPerKg = 2.0;
+
+    const protein = Math.round(w * proteinPerKg);
     const fats = Math.round((tdee * 0.25) / 9);
+    const carbs = Math.round(Math.max(0, tdee - (protein * 4) - (fats * 9)) / 4);
     const fiber = Math.round((tdee / 1000) * 14);
 
     const newGoals: DailyGoals = {
@@ -886,16 +934,20 @@ export default function App() {
                   <input 
                     type="number"
                     value={goals?.[field.key as keyof DailyGoals] || ''}
-                    onChange={(e) => setGoals(prev => prev ? { ...prev, [field.key]: parseFloat(e.target.value) } : null)}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                      setGoals(prev => prev ? { ...prev, [field.key]: val } : null);
+                    }}
                     className="w-full p-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-lg font-semibold dark:text-white"
                   />
                 </div>
               ))}
               <button 
                 onClick={() => goals && updateGoals(goals)}
-                className="w-full py-4 bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-lg shadow-zinc-200 dark:shadow-none"
+                disabled={isSavingGoals}
+                className="w-full py-4 bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-lg shadow-zinc-200 dark:shadow-none disabled:opacity-50"
               >
-                Save All Goals
+                {isSavingGoals ? 'Saving...' : 'Save All Goals'}
               </button>
             </div>
           </section>
@@ -1146,8 +1198,13 @@ export default function App() {
                           key={idx}
                           onClick={() => {
                             setSelectedFood(food);
-                            setQuantity('100');
-                            setUnitType('grams');
+                            if (food.serving_unit && food.serving_unit !== 'g') {
+                              setQuantity('1');
+                              setUnitType('units');
+                            } else {
+                              setQuantity('100');
+                              setUnitType('grams');
+                            }
                           }}
                           className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded-2xl border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700 transition-all text-left"
                         >
@@ -1192,27 +1249,41 @@ export default function App() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <label className="text-sm font-bold text-zinc-500 uppercase">Quantity</label>
-                        <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
-                          <button 
-                            onClick={() => setUnitType('grams')}
-                            className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", unitType === 'grams' ? "bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white" : "text-zinc-400")}
-                          >
-                            Grams
-                          </button>
-                          <button 
-                            onClick={() => setUnitType('units')}
-                            className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", unitType === 'units' ? "bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white" : "text-zinc-400")}
-                          >
-                            Units
-                          </button>
-                        </div>
+                        {selectedFood.serving_unit && selectedFood.serving_unit !== 'g' && (
+                          <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
+                            <button 
+                              onClick={() => setUnitType('units')}
+                              className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", unitType === 'units' ? "bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white" : "text-zinc-400")}
+                            >
+                              {selectedFood.serving_unit}
+                            </button>
+                            <button 
+                              onClick={() => setUnitType('grams')}
+                              className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", unitType === 'grams' ? "bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white" : "text-zinc-400")}
+                            >
+                              grams
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <input 
-                        type="number"
-                        value={quantity}
-                        onChange={(e) => setQuantity(e.target.value)}
-                        className="w-full p-6 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-3xl text-3xl font-bold focus:outline-none focus:ring-4 focus:ring-emerald-500/10 dark:text-white"
-                      />
+
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          value={quantity}
+                          onChange={(e) => setQuantity(e.target.value)}
+                          className="w-full p-6 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-3xl text-3xl font-bold focus:outline-none focus:ring-4 focus:ring-emerald-500/10 dark:text-white"
+                        />
+                        <span className="absolute right-6 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xl uppercase tracking-widest">
+                          {unitType === 'units' ? selectedFood.serving_unit : 'g'}
+                        </span>
+                      </div>
+
+                      {unitType === 'units' && selectedFood.grams_per_unit && (
+                        <p className="text-center text-sm font-medium text-zinc-400">
+                          {quantity} {selectedFood.serving_unit}{parseFloat(quantity) !== 1 ? 's' : ''} = {parseFloat(quantity) * selectedFood.grams_per_unit}g
+                        </p>
+                      )}
                     </div>
 
                     <div className="bg-emerald-50 dark:bg-emerald-900/10 p-6 rounded-3xl space-y-4">
@@ -1292,6 +1363,23 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Saved Toast Notification */}
+      <AnimatePresence>
+        {showSavedToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-6 py-4 rounded-3xl shadow-2xl z-[100] flex items-center gap-3 font-bold border border-zinc-100 dark:border-zinc-800"
+          >
+            <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
+              <Check size={14} className="text-white" />
+            </div>
+            <span className="tracking-tight">Goals saved successfully!</span>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
